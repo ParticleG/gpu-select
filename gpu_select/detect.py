@@ -1,0 +1,114 @@
+"""GPU detection via switcherooctl."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from dataclasses import dataclass, field
+
+
+@dataclass
+class GPU:
+    """Represents a detected GPU."""
+    name: str
+    device: str
+    is_default: bool
+    env: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def label(self) -> str:
+        return "igpu" if self.is_default else "dgpu"
+
+
+def detect_gpus() -> list[GPU]:
+    """Detect GPUs using switcherooctl.
+
+    Returns a list of GPU objects, sorted so the default (iGPU) comes first.
+    """
+    try:
+        result = subprocess.run(
+            ["switcherooctl", "list"],
+            capture_output=True, text=True, check=True,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "switcherooctl not found. Install switcheroo-control:\n"
+            "  sudo pacman -S switcheroo-control\n"
+            "  sudo systemctl enable --now switcheroo-control.service"
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"switcherooctl failed: {e.stderr.strip()}")
+
+    return _parse_switcherooctl(result.stdout)
+
+
+def _parse_switcherooctl(output: str) -> list[GPU]:
+    """Parse switcherooctl list output.
+
+    Example output:
+        Device: 0
+        Name:        Intel® Graphics (ADL GT2)
+        Default:     yes
+        Environment: DRI_PRIME=pci-0000_00_02_0
+
+        Device: 1
+        Name:        NVIDIA GeForce RTX 3060 Laptop GPU
+        Default:     no
+        Environment: __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only
+    """
+    gpus: list[GPU] = []
+    current: dict = {}
+
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            if current:
+                gpus.append(_build_gpu(current))
+                current = {}
+            continue
+
+        if line.startswith("Device:"):
+            if current:
+                gpus.append(_build_gpu(current))
+            current = {"device": line.split(":", 1)[1].strip()}
+        elif line.startswith("Name:"):
+            current["name"] = line.split(":", 1)[1].strip()
+        elif line.startswith("Default:"):
+            current["default"] = line.split(":", 1)[1].strip().lower() == "yes"
+        elif line.startswith("Environment:"):
+            env_str = line.split(":", 1)[1].strip()
+            current["env"] = _parse_env(env_str)
+
+    if current:
+        gpus.append(_build_gpu(current))
+
+    # Sort: default GPU first
+    gpus.sort(key=lambda g: (not g.is_default, g.device))
+    return gpus
+
+
+def _build_gpu(data: dict) -> GPU:
+    return GPU(
+        name=data.get("name", "Unknown"),
+        device=data.get("device", "?"),
+        is_default=data.get("default", False),
+        env=data.get("env", {}),
+    )
+
+
+def _parse_env(env_str: str) -> dict[str, str]:
+    """Parse 'KEY=VALUE KEY2=VALUE2' into a dict."""
+    env: dict[str, str] = {}
+    for part in env_str.split():
+        if "=" in part:
+            k, v = part.split("=", 1)
+            env[k] = v
+    return env
+
+
+def get_env_for_gpu(gpus: list[GPU], label: str) -> dict[str, str]:
+    """Get environment variables for a GPU label ('igpu' or 'dgpu')."""
+    for gpu in gpus:
+        if gpu.label == label:
+            return dict(gpu.env)
+    raise ValueError(f"No GPU found with label '{label}'. Available: {[g.label for g in gpus]}")
