@@ -7,6 +7,8 @@ wrap commands with the appropriate GPU environment variables.
 from __future__ import annotations
 
 import fnmatch
+import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -27,6 +29,14 @@ def get_source_instruction() -> str:
     return f'source "{_ENV_FILE}"'
 
 
+_SAFE_NAME_RE = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_.+-]*$')
+
+
+def _is_safe_shell_name(name: str) -> bool:
+    """Return True if name is safe to use as a shell function name."""
+    return bool(_SAFE_NAME_RE.match(name))
+
+
 def _is_glob_pattern(pattern: str) -> bool:
     """Return True if the pattern contains glob metacharacters."""
     return any(c in pattern for c in ("*", "?", "[", "]"))
@@ -42,7 +52,13 @@ def _find_gpu(gpus: list[GPU], label: str) -> GPU | None:
 
 def _env_prefix(env: dict[str, str]) -> str:
     """Format env vars as a shell inline prefix string."""
-    return " ".join(f"{k}={v}" for k, v in env.items())
+    parts = []
+    for k, v in env.items():
+        if any(c in v for c in (' ', '"', "'", '$', '`', '\\', ';', '&', '|')):
+            parts.append(f"{k}={shlex.quote(v)}")
+        else:
+            parts.append(f"{k}={v}")
+    return " ".join(parts)
 
 
 def generate_shell_config(
@@ -82,6 +98,17 @@ def generate_shell_config(
             lines.append(
                 f"# (glob pattern — only works via `gpu-select run {match}`)"
             )
+            lines.append("")
+            continue
+
+        if not _is_safe_shell_name(match):
+            print(
+                f"[gpu-select] Warning: skipping '{match}' — "
+                "contains characters unsafe for shell function names.",
+                file=sys.stderr,
+            )
+            lines.append(f"# {match} → {gpu_label}")
+            lines.append("# (unsafe characters — only works via `gpu-select run`)")
             lines.append("")
             continue
 

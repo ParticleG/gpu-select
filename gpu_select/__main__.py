@@ -12,7 +12,7 @@ from gpu_select import __version__
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="gpu-select",
-        description="Per-app GPU selection for Linux hybrid GPU laptops",
+        description="Per-app GPU assignment for Linux hybrid GPU laptops",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
@@ -129,9 +129,7 @@ def cmd_set(match: str, gpu: str, system: bool) -> int:
 
 
 def cmd_run(app: str, app_args: list[str]) -> int:
-    import fnmatch
-
-    from gpu_select.config import get_default_gpu, get_rule, load_merged_config
+    from gpu_select.config import get_default_gpu, get_rule
     from gpu_select.detect import detect_gpus, get_env_for_gpu
 
     # Find matching rule
@@ -162,7 +160,7 @@ def cmd_run(app: str, app_args: list[str]) -> int:
 
 
 def cmd_apply(desktop_only: bool, shell_only: bool, compositor_only: bool) -> int:
-    from gpu_select.config import get_default_gpu, list_rules, load_merged_config
+    from gpu_select.config import get_default_gpu, list_rules
     from gpu_select.detect import detect_gpus
 
     gpus = detect_gpus()
@@ -222,7 +220,8 @@ def cmd_check() -> int:
     running_names: set[str] = set()
     for pid in pids:
         try:
-            comm = open(f"/proc/{pid}/comm").read().strip()
+            with open(f"/proc/{pid}/comm") as f:
+                comm = f.read().strip()
             running_names.add(comm)
         except (OSError, PermissionError):
             continue

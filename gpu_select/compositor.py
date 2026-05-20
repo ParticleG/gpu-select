@@ -15,6 +15,7 @@ Limitations:
 from __future__ import annotations
 
 import os
+import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -62,6 +63,13 @@ def _env_pairs(env: dict[str, str]) -> list[tuple[str, str]]:
     return sorted(env.items())
 
 
+def _format_env_pair(k: str, v: str) -> str:
+    """Format a single KEY=VALUE pair, quoting the value if needed."""
+    if any(c in v for c in (' ', '"', "'", '$', '`', '\\', ';', '&', '|', '(', ')', '<', '>')):
+        return f"{k}={shlex.quote(v)}"
+    return f"{k}={v}"
+
+
 # ---------------------------------------------------------------------------
 # Per-compositor generators
 # ---------------------------------------------------------------------------
@@ -80,7 +88,7 @@ def _generate_niri(rules: list[dict], default_gpu: str, gpus: list[GPU]) -> str:
         "",
     ]
     for rule in rules:
-        app: str = rule.get("app", "")
+        app: str = rule.get("match", "")
         if not app:
             continue
         env = _env_for_rule(rule, gpus, default_gpu)
@@ -88,7 +96,7 @@ def _generate_niri(rules: list[dict], default_gpu: str, gpus: list[GPU]) -> str:
             lines.append(f'spawn-at-startup "{app}"')
         else:
             env_args = " ".join(
-                f'"{k}={v}"' for k, v in _env_pairs(env)
+                f'"{k}={v.replace(chr(34), chr(92) + chr(34))}"' for k, v in _env_pairs(env)
             )
             lines.append(f'spawn-at-startup "env" {env_args} "{app}"')
     return "\n".join(lines) + "\n"
@@ -103,14 +111,14 @@ def _generate_hyprland(rules: list[dict], default_gpu: str, gpus: list[GPU]) -> 
         "",
     ]
     for rule in rules:
-        app: str = rule.get("app", "")
+        app: str = rule.get("match", "")
         if not app:
             continue
         env = _env_for_rule(rule, gpus, default_gpu)
         if not env:
             lines.append(f"exec = {app}")
         else:
-            env_prefix = " ".join(f"{k}={v}" for k, v in _env_pairs(env))
+            env_prefix = " ".join(_format_env_pair(k, v) for k, v in _env_pairs(env))
             lines.append(f"exec = env {env_prefix} {app}")
     return "\n".join(lines) + "\n"
 
@@ -124,14 +132,14 @@ def _generate_sway(rules: list[dict], default_gpu: str, gpus: list[GPU]) -> str:
         "",
     ]
     for rule in rules:
-        app: str = rule.get("app", "")
+        app: str = rule.get("match", "")
         if not app:
             continue
         env = _env_for_rule(rule, gpus, default_gpu)
         if not env:
             lines.append(f"exec {app}")
         else:
-            env_prefix = " ".join(f"{k}={v}" for k, v in _env_pairs(env))
+            env_prefix = " ".join(_format_env_pair(k, v) for k, v in _env_pairs(env))
             lines.append(f"exec env {env_prefix} {app}")
     return "\n".join(lines) + "\n"
 
@@ -183,7 +191,7 @@ def generate_compositor_config(
     compositor:
         One of ``"niri"``, ``"hyprland"``, or ``"sway"``.
     rules:
-        List of rule dicts, each with at least an ``"app"`` key (command to
+        List of rule dicts, each with at least a ``"match"`` key (command to
         launch) and an optional ``"gpu"`` key (GPU label/device/name to use).
     default_gpu:
         Label, device path, or name of the GPU to use when a rule has no

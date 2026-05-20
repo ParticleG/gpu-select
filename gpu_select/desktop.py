@@ -99,9 +99,9 @@ def _match_desktop_to_rule(
     """Return the first rule that matches *desktop_path*, or None.
 
     Matching strategy (in order):
-    1. Rule ``app`` key matched against the .desktop basename without extension
+    1. Rule ``match`` key matched against the .desktop basename without extension
        using ``fnmatch.fnmatch`` (case-insensitive).
-    2. Rule ``app`` key matched against the executable basename from ``Exec=``
+    2. Rule ``match`` key matched against the executable basename from ``Exec=``
        using ``fnmatch.fnmatch`` (case-insensitive).
     """
     stem = desktop_path.stem.lower()
@@ -110,7 +110,7 @@ def _match_desktop_to_rule(
     entries: list[tuple[str, str | None]] | None = None
 
     for rule in rules:
-        app_pattern = rule.get("app", "")
+        app_pattern = rule.get("match", "")
         if not app_pattern:
             continue
         pattern_lower = app_pattern.lower()
@@ -196,7 +196,7 @@ def _collect_desktop_files() -> list[Path]:
     seen: set[str] = set()
     files: list[Path] = []
 
-    for directory in (_SYSTEM_APPS_DIR, _USER_APPS_DIR):
+    for directory in (_USER_APPS_DIR, _SYSTEM_APPS_DIR):
         if not directory.is_dir():
             continue
         for p in sorted(directory.glob("*.desktop")):
@@ -263,7 +263,7 @@ def generate_desktop_overrides(
     Parameters
     ----------
     rules:
-        List of rule dicts, each with at minimum ``app`` (pattern) and
+        List of rule dicts, each with at minimum ``match`` (pattern) and
         ``gpu`` (label, e.g. ``"dgpu"``).
     gpus:
         List of detected :class:`~gpu_select.detect.GPU` instances as
@@ -314,7 +314,7 @@ def generate_desktop_overrides(
 # Override removal / listing
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _is_gpu_select_override(path: Path) -> bool:
+def _is_gpu_assign_override(path: Path) -> bool:
     """Return True if *path* is a gpu-select generated override."""
     try:
         first_line = path.read_text(encoding="utf-8", errors="replace").split("\n", 1)[0]

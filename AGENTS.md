@@ -46,5 +46,7 @@ pytest
 ## Gotchas
 
 - No test suite exists yet. If adding tests, mock `subprocess.run` for `switcherooctl` and filesystem writes for config/desktop/shell/compositor outputs.
-- `compositor.py` generators expect rules with an `"app"` key (not `"match"`); the `cmd_apply` flow passes `list_rules()` output which uses `"match"`. This is a known inconsistency — compositor generators silently skip rules without `"app"`.
+- All modules use `"match"` as the canonical rule key. `list_rules()` returns dicts with `"match"`, `"gpu"`, optional `"env"`, and `"source"`.
 - `SNIPPET_DIR` and other paths use `Path.expanduser()` at module import time — tests must patch these or use `monkeypatch` on `Path.home()`.
+- `shell.py` validates match names against `_SAFE_NAME_RE` before emitting shell functions; unsafe names are skipped with a warning.
+- Env var values are quoted with `shlex.quote()` when they contain shell metacharacters.
