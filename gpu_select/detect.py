@@ -32,12 +32,24 @@ def detect_gpus() -> list[GPU]:
         )
     except FileNotFoundError:
         raise RuntimeError(
-            "switcherooctl not found. Install switcheroo-control:\n"
+            "switcherooctl not found. Install and enable switcheroo-control:\n"
             "  sudo pacman -S switcheroo-control\n"
             "  sudo systemctl enable --now switcheroo-control.service"
         )
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"switcherooctl failed: {e.stderr.strip()}")
+        stderr = e.stderr.strip()
+        if "No GPUs" in stderr or "not available" in stderr.lower() or e.returncode != 0:
+            # Check if the service is running
+            svc = subprocess.run(
+                ["systemctl", "is-active", "switcheroo-control.service"],
+                capture_output=True, text=True,
+            )
+            if svc.stdout.strip() != "active":
+                raise RuntimeError(
+                    "switcheroo-control.service is not running. Enable it:\n"
+                    "  sudo systemctl enable --now switcheroo-control.service"
+                )
+        raise RuntimeError(f"switcherooctl failed: {stderr}")
 
     return _parse_switcherooctl(result.stdout)
 
