@@ -36,6 +36,8 @@ jobs:
         with:
           pkgname: gpu-select
           pkgbuild: ./PKGBUILD
+          assets: |
+            gpu-select.install
           commit_username: ParticleG
           commit_email: particle_g@outlook.com
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
