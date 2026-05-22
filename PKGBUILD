@@ -8,6 +8,7 @@ url="https://github.com/ParticleG/gpu-select"
 license=('MIT')
 depends=('python>=3.11' 'python-tomlkit' 'switcheroo-control')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+install=gpu-select.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 

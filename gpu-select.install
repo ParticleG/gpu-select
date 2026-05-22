@@ -1,6 +1,6 @@
 post_install() {
-    echo "==> NOTE: gpu-select requires switcheroo-control.service to detect GPUs."
-    echo "==> Run: sudo systemctl enable --now switcheroo-control.service"
+    echo "==> Enable switcheroo-control service for GPU detection:"
+    echo "      sudo systemctl enable --now switcheroo-control.service"
 }
 
 post_upgrade() {
