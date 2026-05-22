@@ -13,10 +13,15 @@ class GPU:
     name: str
     device: str
     is_default: bool
+    is_discrete: bool | None = None  # None = field not present in output
     env: dict[str, str] = field(default_factory=dict)
 
     @property
     def label(self) -> str:
+        # Prefer Discrete field (more reliable on modern systems)
+        if self.is_discrete is not None:
+            return "dgpu" if self.is_discrete else "igpu"
+        # Fallback: default GPU is typically the iGPU
         return "igpu" if self.is_default else "dgpu"
 
 
@@ -61,11 +66,13 @@ def _parse_switcherooctl(output: str) -> list[GPU]:
         Device: 0
         Name:        Intel® Graphics (ADL GT2)
         Default:     yes
+        Discrete:    no
         Environment: DRI_PRIME=pci-0000_00_02_0
 
         Device: 1
         Name:        NVIDIA GeForce RTX 3060 Laptop GPU
         Default:     no
+        Discrete:    yes
         Environment: __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only
     """
     gpus: list[GPU] = []
@@ -87,6 +94,8 @@ def _parse_switcherooctl(output: str) -> list[GPU]:
             current["name"] = line.split(":", 1)[1].strip()
         elif line.startswith("Default:"):
             current["default"] = line.split(":", 1)[1].strip().lower() == "yes"
+        elif line.startswith("Discrete:"):
+            current["discrete"] = line.split(":", 1)[1].strip().lower() == "yes"
         elif line.startswith("Environment:"):
             env_str = line.split(":", 1)[1].strip()
             current["env"] = _parse_env(env_str)
@@ -94,8 +103,8 @@ def _parse_switcherooctl(output: str) -> list[GPU]:
     if current:
         gpus.append(_build_gpu(current))
 
-    # Sort: default GPU first
-    gpus.sort(key=lambda g: (not g.is_default, g.device))
+    # Sort: iGPU first (non-discrete before discrete)
+    gpus.sort(key=lambda g: (g.is_discrete if g.is_discrete is not None else not g.is_default, g.device))
     return gpus
 
 
@@ -104,6 +113,7 @@ def _build_gpu(data: dict) -> GPU:
         name=data.get("name", "Unknown"),
         device=data.get("device", "?"),
         is_default=data.get("default", False),
+        is_discrete=data.get("discrete"),  # None if not present
         env=data.get("env", {}),
     )
 
