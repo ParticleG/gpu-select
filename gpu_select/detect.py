@@ -129,8 +129,76 @@ def _parse_env(env_str: str) -> dict[str, str]:
 
 
 def get_env_for_gpu(gpus: list[GPU], label: str) -> dict[str, str]:
-    """Get environment variables for a GPU label ('igpu' or 'dgpu')."""
+    """Get environment variables for a GPU mode.
+
+    Supported labels:
+      - 'igpu': Full iGPU isolation — blocks all NVIDIA library loading
+      - 'igpu+accel': iGPU rendering, but allows dGPU acceleration (video decode, etc.)
+      - 'dgpu': Full dGPU rendering via NVIDIA PRIME offload
+    """
+    if label == "igpu":
+        # Full isolation: render on iGPU AND block all NVIDIA library paths
+        igpu = _find_gpu_by_label(gpus, "igpu")
+        env = dict(igpu.env) if igpu else {}
+        # Add NVIDIA isolation vars
+        env.update(_nvidia_isolation_env())
+        return env
+
+    if label == "igpu+accel":
+        # iGPU rendering only (DRI_PRIME), but allow NVIDIA libs to load
+        igpu = _find_gpu_by_label(gpus, "igpu")
+        return dict(igpu.env) if igpu else {}
+
+    if label == "dgpu":
+        dgpu = _find_gpu_by_label(gpus, "dgpu")
+        if dgpu:
+            return dict(dgpu.env)
+        raise ValueError(f"No dGPU found. Available: {[g.label for g in gpus]}")
+
+    raise ValueError(f"Unknown GPU mode '{label}'. Use 'igpu', 'igpu+accel', or 'dgpu'.")
+
+
+def _find_gpu_by_label(gpus: list[GPU], label: str) -> GPU | None:
+    """Find first GPU matching the given label."""
     for gpu in gpus:
         if gpu.label == label:
-            return dict(gpu.env)
-    raise ValueError(f"No GPU found with label '{label}'. Available: {[g.label for g in gpus]}")
+            return gpu
+    return None
+
+
+def _nvidia_isolation_env() -> dict[str, str]:
+    """Return env vars that completely prevent NVIDIA GPU access.
+
+    This blocks:
+    - EGL: only load Mesa ICD
+    - GLX: force Mesa
+    - Vulkan: disable NVIDIA ICD and layers
+    - VA-API: force radeonsi driver
+    - DRI: force device 0 (iGPU)
+    """
+    from pathlib import Path
+
+    env: dict[str, str] = {}
+
+    # EGL: only load Mesa vendor library
+    mesa_egl = Path("/usr/share/glvnd/egl_vendor.d/50_mesa.json")
+    if mesa_egl.exists():
+        env["__EGL_VENDOR_LIBRARY_FILENAMES"] = str(mesa_egl)
+
+    # GLX: force Mesa
+    env["__GLX_VENDOR_LIBRARY_NAME"] = "mesa"
+
+    # Vulkan: use only AMD/radeon ICD, disable NVIDIA ICD and layers
+    radeon_icd = Path("/usr/share/vulkan/icd.d/radeon_icd.json")
+    if radeon_icd.exists():
+        env["VK_DRIVER_FILES"] = str(radeon_icd)
+    env["VK_LOADER_DRIVERS_DISABLE"] = "nvidia*"
+    env["VK_LOADER_LAYERS_DISABLE"] = "VK_LAYER_NV_*"
+
+    # VA-API: force radeonsi
+    env["LIBVA_DRIVER_NAME"] = "radeonsi"
+
+    # DRI: force iGPU
+    env["DRI_PRIME"] = "0"
+
+    return env

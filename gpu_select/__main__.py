@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     # set
     p_set = sub.add_parser("set", help="Set GPU preference for an app")
     p_set.add_argument("match", help="App name or glob pattern (e.g. 'blender', 'electron*')")
-    p_set.add_argument("gpu", choices=["igpu", "dgpu"], help="GPU to use")
+    p_set.add_argument("gpu", choices=["igpu", "igpu+accel", "dgpu"], help="GPU mode: igpu (full isolation), igpu+accel (iGPU render + dGPU accel), dgpu")
     p_set.add_argument("--system", action="store_true", help="Write to system config instead of user config")
 
     # run
@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def cmd_detect() -> int:
-    from gpu_select.detect import detect_gpus
+    from gpu_select.detect import detect_gpus, _nvidia_isolation_env
 
     gpus = detect_gpus()
     if not gpus:
@@ -88,6 +88,12 @@ def cmd_detect() -> int:
         else:
             print("  Env:    (none — system default)")
         print()
+
+    print("Available GPU modes:")
+    print("  igpu        — Full iGPU, completely blocks NVIDIA access")
+    print("  igpu+accel  — iGPU rendering, allows dGPU acceleration (video decode, etc.)")
+    print("  dgpu        — Full dGPU via NVIDIA PRIME render offload")
+    print()
 
     return 0
 
@@ -198,16 +204,17 @@ def cmd_apply(desktop_only: bool, shell_only: bool, compositor_only: bool) -> in
 
 
 def cmd_check() -> int:
-    """Check for running processes that match dGPU rules."""
+    """Check for running processes that may hold NVIDIA GPU resources."""
     import fnmatch
 
     from gpu_select.config import list_rules
 
     rules = list_rules()
-    dgpu_rules = [r for r in rules if r["gpu"] == "dgpu"]
+    # Both dgpu and igpu+accel apps may hold /dev/nvidia* open
+    nvidia_rules = [r for r in rules if r["gpu"] in ("dgpu", "igpu+accel")]
 
-    if not dgpu_rules:
-        print("No apps configured to use dGPU.")
+    if not nvidia_rules:
+        print("No apps configured to use dGPU or dGPU acceleration.")
         return 0
 
     # Get running process names
@@ -227,20 +234,21 @@ def cmd_check() -> int:
             continue
 
     # Check matches
-    matches: list[tuple[str, str]] = []
-    for rule in dgpu_rules:
+    matches: list[tuple[str, str, str]] = []
+    for rule in nvidia_rules:
         pattern = rule["match"]
+        gpu_mode = rule["gpu"]
         for name in running_names:
             if fnmatch.fnmatch(name, pattern):
-                matches.append((name, pattern))
+                matches.append((name, pattern, gpu_mode))
 
     if matches:
-        print("⚠ Running processes configured to use dGPU:")
-        for name, pattern in sorted(matches):
-            print(f"  {name} (rule: {pattern})")
+        print("⚠ Running processes that may hold NVIDIA GPU resources:")
+        for name, pattern, gpu_mode in sorted(matches):
+            print(f"  {name} (rule: {pattern}, mode: {gpu_mode})")
         return 1
     else:
-        print("✓ No dGPU-configured apps are currently running.")
+        print("✓ No apps using or potentially using dGPU are running.")
         return 0
 
 

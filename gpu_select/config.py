@@ -25,7 +25,7 @@ DEFAULT_CONFIG: str = """\
 # gpu-select configuration
 # Manage per-application GPU assignment for hybrid graphics systems.
 #
-# gpu values: "igpu" (integrated) or "dgpu" (discrete)
+# gpu values: "igpu" (full isolation), "igpu+accel" (iGPU render + dGPU accel), or "dgpu" (discrete)
 
 [defaults]
 # Fallback GPU when no rule matches.
@@ -36,7 +36,7 @@ gpu = "igpu"
 # ---------------------------------------------------------------------------
 # Each rule must have:
 #   match  — process name, .desktop app-id, or glob pattern (fnmatch syntax)
-#   gpu    — "igpu" or "dgpu"
+#   gpu    — "igpu", "igpu+accel", or "dgpu"
 # Optional:
 #   [rules.env]  — extra environment variables injected alongside the prime
 #                  variables (e.g. LIBVA_DRIVER_NAME, VDPAU_DRIVER …)
@@ -174,14 +174,14 @@ def set_rule(
     match:
         The process name / app-id / glob pattern to match.
     gpu:
-        ``"igpu"`` or ``"dgpu"``.
+        ``"igpu"``, ``"igpu+accel"``, or ``"dgpu"``.
     env:
         Optional dict of extra environment variables.
     system:
         If ``True``, write to the system config; otherwise the user config.
     """
-    if gpu not in {"igpu", "dgpu"}:
-        raise ValueError(f"gpu must be 'igpu' or 'dgpu', got {gpu!r}")
+    if gpu not in {"igpu", "igpu+accel", "dgpu"}:
+        raise ValueError(f"gpu must be 'igpu', 'igpu+accel', or 'dgpu', got {gpu!r}")
 
     path = get_config_path(system)
 
