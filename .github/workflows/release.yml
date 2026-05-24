@@ -25,11 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Update PKGBUILD version
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+      - name: Sync version from tag
+        run: ./bump-version.sh "${GITHUB_REF#refs/tags/v}"
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.3

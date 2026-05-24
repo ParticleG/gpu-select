@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gpu-select"
-version = "0.1.0"
+version = "0.1.7"
 description = "Per-app GPU selection tool for Linux hybrid GPU laptops"
 requires-python = ">=3.11"
 license = "MIT"
